@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from DCGAN_architecture import Generator, Discriminator
+from DCGAN_architecture import Generator, Discriminator, AAEGenerator
 
 import record
 
@@ -20,10 +20,10 @@ def _random_init(config):
     random.seed(manualSeed)
     torch.manual_seed(manualSeed)
 
-def _get_a_net(Net, config):
+def _get_a_net(Net, config, isize):
     ngpu = config["number_gpus"]
     device = config["device"]
-    net = Net(config).to(device)
+    net = Net(config, isize).to(device)
     if (device.type == 'cuda') and (ngpu > 1):
         net = nn.DataParallel(net, list(range(ngpu)))
     net.apply(_weights_init)
@@ -31,8 +31,8 @@ def _get_a_net(Net, config):
     record.save_status(config, net)
     return net
 
-def _get_optimizer(net, config):
-    lr = config["learn_rate"]
+def _get_optimizer(net, config, lr):
+    # lr = config["learn_rate"]
     beta1 = config["beta1"]
     opt = optim.Adam(net.parameters(), lr=lr, betas=(beta1, 0.999))
     return opt
@@ -80,13 +80,15 @@ def get_model_dict(train_model):
     return model_dict
 
 
-def init_train_model(config):
+def init_train_model(config, isize):
     _random_init(config)
-    netG = _get_a_net(Generator, config)
-    netD = _get_a_net(Discriminator, config)
+    netG = _get_a_net(AAEGenerator, config, isize)
+    netD = _get_a_net(Discriminator, config, isize)
     criterion = nn.BCELoss()
-    optimizerD = _get_optimizer(netD, config)
-    optimizerG = _get_optimizer(netG, config)
+    optimizerD = _get_optimizer(netD, config, config["discriminator_learn_rate"])
+    optimizerG = _get_optimizer(netG, config, config["generator_learn_rate"])
+
+
 
     fixed_noise = _get_fixed_noise(config)
 
@@ -115,21 +117,52 @@ def _run_Discriminator(netD, data, label, loss):
     m = output.mean().item()
     return err, m
 
-def get_Discriminator_loss(netD, optimizerD, real_data, fake_data, label, criterion, config):
-    netD.zero_grad()
-    errD_real, D_x = _run_Discriminator(netD, real_data, label, criterion)
-    label.fill_(config["fake_label"])
-    errD_fake, D_G_z1 = _run_Discriminator(netD, fake_data, label, criterion)
-    errD = errD_real + errD_fake
+def get_Discriminator_loss(netD, optimizerD, pred_real, pred_fake, real_label, fake_label):
+    # netD.zero_grad()
+    # Real - Fake Loss
+    l_bce = nn.BCELoss()
+    err_d_real = l_bce(pred_real, real_label)
+    err_d_fake = l_bce(pred_fake, fake_label)
+    # err_d_real = pred_real - real_label
+    # err_d_fake = pred_fake - fake_label
+    # err_d_real.mean()
+    # err_d_fake.mean()
+    # NetD Loss & Backward-Pass
+    optimizerD.zero_grad()
+    err_d = (err_d_real + err_d_fake) * 0.5
+    err_d.backward()
     optimizerD.step()
-    return errD, D_x, D_G_z1
+    return err_d
 
-def get_Generator_loss(netG, netD, optimizerG, fake_data, label, criterion, config):
+def get_Generator_loss(netG, netD, optimizerG, input, fake, latent_i, config):
     netG.zero_grad()
-    label.fill_(config["real_label"])  # fake labels are real for generator cost
-    errG, D_G_z2 = _run_Discriminator(netD, fake_data, label, criterion)
+    l_adv = l2_loss
+    l_con = nn.L1Loss()
+    l_enc = l2_loss
+    err_g_adv = l_adv(netD(input)[1], netD(fake)[1])
+    err_g_con = l_con(fake, input)
+    err_g_enc = l_enc(latent_i, netG(fake)[1])
+    err_g = err_g_adv * config["w_adv"] + \
+                 err_g_con * config["w_con"] + \
+                 err_g_enc * config["w_enc"]
+    err_g.backward(retain_graph=True)
     optimizerG.step()
-    return errG, D_G_z2
+    return err_g
+
+def l2_loss(input, target, size_average=True):
+    """ L2 Loss without reduce flag.
+
+    Args:
+        input (FloatTensor): Input tensor
+        target (FloatTensor): Output tensor
+
+    Returns:
+        [FloatTensor]: L2 distance between input and output
+    """
+    if size_average:
+        return torch.mean(torch.pow((input-target), 2))
+    else:
+        return torch.pow((input-target), 2)
 
 def get_label(data, config):
     b_size = data.size(0)
