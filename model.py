@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from DCGAN_architecture import Generator, Discriminator, AAEGenerator
+from DCGAN_architecture import Generator, Discriminator, AAEGenerator, AAEGenerator2
 
 import record
 
@@ -31,10 +31,13 @@ def _get_a_net(Net, config, isize):
     record.save_status(config, net)
     return net
 
-def _get_optimizer(net, config, lr):
+def _get_optimizer(net, config, lr, optimAdam):
     # lr = config["learn_rate"]
     beta1 = config["beta1"]
-    opt = optim.Adam(net.parameters(), lr=lr, betas=(beta1, 0.999))
+    if optimAdam:
+        opt = optim.Adam(net.parameters(), lr=lr, betas=(beta1, 0.999))
+    else:
+        opt = optim.RMSprop(net.parameters(), lr=lr)
     return opt
 
 def _get_fixed_noise(config):
@@ -85,10 +88,8 @@ def init_train_model(config, isize):
     netG = _get_a_net(AAEGenerator, config, isize)
     netD = _get_a_net(Discriminator, config, isize)
     criterion = nn.BCELoss()
-    optimizerD = _get_optimizer(netD, config, config["discriminator_learn_rate"])
-    optimizerG = _get_optimizer(netG, config, config["generator_learn_rate"])
-
-
+    optimizerD = _get_optimizer(netD, config, config["discriminator_learn_rate"], config["optimAdam"])
+    optimizerG = _get_optimizer(netG, config, config["generator_learn_rate"], config["optimAdam"])
 
     fixed_noise = _get_fixed_noise(config)
 
@@ -101,7 +102,11 @@ def init_train_model(config, isize):
     train_model["fixed_noise"] = fixed_noise
 
     train_model["G_losses"] = []
+    train_model["G_losses"].append([])
+    train_model["G_losses"].append([])
     train_model["D_losses"] = []
+    train_model["D_losses"].append([])
+    train_model["D_losses"].append([])
     train_model["img_list"] = []
     train_model["current_iters"] = 0
     train_model["current_epoch"] = 0
@@ -118,7 +123,6 @@ def _run_Discriminator(netD, data, label, loss):
     return err, m
 
 def get_Discriminator_loss(netD, optimizerD, pred_real, pred_fake, real_label, fake_label):
-    # netD.zero_grad()
     # Real - Fake Loss
     l_bce = nn.BCELoss()
     err_d_real = l_bce(pred_real, real_label)
@@ -134,14 +138,14 @@ def get_Discriminator_loss(netD, optimizerD, pred_real, pred_fake, real_label, f
     optimizerD.step()
     return err_d
 
-def get_Generator_loss(netG, netD, optimizerG, input, fake, latent_i, config):
+def get_Generator_loss(netG, netD, optimizerG, input, fake, latent_i, latent_o, config):
     netG.zero_grad()
     l_adv = l2_loss
     l_con = nn.L1Loss()
     l_enc = l2_loss
     err_g_adv = l_adv(netD(input)[1], netD(fake)[1])
     err_g_con = l_con(fake, input)
-    err_g_enc = l_enc(latent_i, netG(fake)[1])
+    err_g_enc = l_enc(latent_i, latent_o)
     err_g = err_g_adv * config["w_adv"] + \
                  err_g_con * config["w_con"] + \
                  err_g_enc * config["w_enc"]

@@ -62,22 +62,27 @@ class NNGraph(object):
         real_label = torch.ones(size=(self.config["batch_size"],), dtype=torch.float32, device=device)
         fake_label = torch.zeros(size=(self.config["batch_size"],), dtype=torch.float32, device=device)
 
+
         with torch.no_grad():
             input.resize_(data[0].size()).copy_(data[0])
             # gt.resize_(data[1].size()).copy_(data[1])
             label.resize_(data[1].size())
 
+
         fake, latent_i = netG(input)
+        _, latent_o= netG(fake)
         pred_real, feat_real = netD(input)
         pred_fake, feat_fake = netD(fake.detach())
 
         errD = torch.tensor([0])
 
-        # if i % self.config["discriminator_learntimes"] == 0:
-        for parm in netD.parameters():
-            parm.data.clamp_(-self.config["clamp_num"], self.config["clamp_num"])
-        errD = model.get_Discriminator_loss(netD, optimizerD, pred_real, pred_fake, real_label, fake_label)
-        errG = model.get_Generator_loss(netG, netD, optimizerG, input, fake, latent_i, self.config)
+        if i % self.config["generator_learntimes"] == 0:
+            for p in netD.parameters(): # reset requires_grad
+                p.requires_grad = True # they are set to False below in netG update
+            for parm in netD.parameters():
+                parm.data.clamp_(-self.config["clamp_num"], self.config["clamp_num"])
+            errD = model.get_Discriminator_loss(netD, optimizerD, pred_real, pred_fake, real_label, fake_label)
+        errG = model.get_Generator_loss(netG, netD, optimizerG, input, fake, latent_i, latent_o, self.config)
 
         #if errD.item() < 1e-5:
             #self.train_model["netG"].apply(model._weights_init)
@@ -144,19 +149,53 @@ class NNGraph(object):
         iters = self.train_model["current_iters"]
         start_epoch = self.train_model["current_epoch"]
 
-        for _, data in enumerate(self.dataloader['train'], 0):
-            data[0] = self.gasuss_noise(data[0])
+        if self.config["add_gasuss"]:
+            for _, data in enumerate(self.dataloader['train'], 0):
+                data[0] = self.gasuss_noise(data[0])
         for epoch in range(start_epoch, num_epochs):
             self.train_model["current_epoch"] = epoch
             for i, data in enumerate(self.dataloader['train'], 0):
                 errD, errG = self._train_a_step(data, i, epoch)
-                G_losses.append(errG.item())
-                D_losses.append(errD.item())
+                G_losses[0].append(i + epoch * len(self.dataloader['train']))
+                G_losses[1].append(errG.item())
+                if errD.item() != 0:
+                    D_losses[0].append(i + epoch * len(self.dataloader['train']))
+                    D_losses[1].append(errD.item())
                 iters += 1
                 self.train_model["current_iters"] = iters
 
                 # self._save_generator_images(iters, epoch, i)
             self.test()
+        self._save_loss_images(G_losses, D_losses)
+
+    def _save_loss_images(self, G_losses, D_losses):
+        x1 = G_losses[0]
+        x2 = D_losses[0]
+        y1 = G_losses[1]
+        y2 = D_losses[1]
+
+        fig = plt.figure(figsize=(7, 5))  # figsize是图片的大小`
+        fig.add_subplot(2, 1, 1)  # ax1是子图的名字`
+        plt.plot(x1, y1, 'g-', label=u'G_loss')
+        plt.legend()  # 显示图例, 图例中内容由 label 定义
+        plt.ylabel('loss')  # 横坐标轴的标题
+        plt.xlabel('iters')  # 纵坐标轴的标题
+        fig.add_subplot(2, 1, 2)  # ax1是子图的名字`
+        plt.plot(x2, y2, 'r-', label=u'D_loss')
+        plt.legend()  # 显示图例, 图例中内容由 label 定义
+        plt.ylabel('loss')  # 横坐标轴的标题
+        plt.xlabel('iters')  # 纵坐标轴的标题
+        ticks = time.time()
+        # plt.text(-1, -1, "generator_learntimes: %s\t " % self.config["generator_learntimes"])
+        show._save_loss(G_losses, D_losses, ticks)
+        plt.title('Loss图-mnist-1')  # 图形的标题
+
+        # 显示图形
+        show._save_loss()
+        show._read_loss(ticks)
+        plt.savefig("save/loss/loss_%s.png" % int(ticks))
+
+        plt.show()
 
     def gasuss_noise(self, image, mean=0, var=0.001):
         '''
@@ -248,11 +287,9 @@ class NNGraph(object):
             roc_auc = self.roc(gt_labels, an_scores, self.config)
             time_o = time.time()
             step_time = time_o - time_i
-            print_str = 'roc_auc: %.4f\t step_time: %.fs' % (
-                roc_auc,
-                step_time,
-            )
-            print(print_str)
+            record.print_scores(roc_auc, step_time, self.config)
+            # record.save_status(self.config, print_str)
+            # print(print_str)
 
 
     def roc(self, labels, scores, config, saveto = None):
@@ -292,3 +329,10 @@ class NNGraph(object):
 
 
         return roc_auc
+
+def test():
+    ticks = time.time()
+    ptr = "loss_%s" % int(ticks)
+    print(ptr)
+
+test()

@@ -63,3 +63,10 @@ def print_status(step_time, take_time, epoch, i, errD, errG, config, dataloader)
                                                         )
     # pylint: enable=bad-continuation
     save_status(config, print_str)
+
+def print_scores(auc, steptime, config):
+    # pylint: disable=bad-continuation
+    print_str = 'roc_auc: %.4f\t take_time: %.fs' % (auc,
+                                                     steptime)
+    # pylint: enable=bad-continuation
+    save_status(config, print_str)

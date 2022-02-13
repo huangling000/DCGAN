@@ -62,13 +62,14 @@ class DisEncoder(nn.Module):
             in_feat = cndf
             out_feat = cndf * 2
             main.add_module('pyramid-{0}-{1}-conv'.format(in_feat, out_feat), nn.Conv2d(in_feat, out_feat, 4, 2, 1, bias=False))
-            # main.add_module('pyramid-{0}-batchnorm'.format(out_feat), nn.BatchNorm2d(out_feat))
+            main.add_module('pyramid-{0}-batchnorm'.format(out_feat), nn.BatchNorm2d(out_feat))
             main.add_module('pyramid-{0}-relu'.format(out_feat), nn.LeakyReLU(0.2, inplace=True))
             # main.add_module('pyramid-{0}-selayer'.format(out_feat), SELayer(out_feat))
             cndf = cndf * 2
+
             csize = csize / 2
         main.add_module('final-{0}-{1}-conv'.format(cndf, 1), nn.Conv2d(cndf, nz, 4, 1, 0, bias=False)) # nz x 1 x 1
-        main.add_module('pyramid-{0}-selayer'.format(nz), SELayer(nz))
+        # main.add_module('pyramid-{0}-selayer'.format(nz), SELayer(nz))
         self.main = main
 
     def forward(self, input):
@@ -91,12 +92,12 @@ class Encoder(nn.Module):
             out_feat = cndf * 2
             main.add_module('pyramid-{0}-{1}-conv'.format(in_feat, out_feat), nn.Conv2d(in_feat, out_feat, 4, 2, 1, bias=False))
             main.add_module('pyramid-{0}-batchnorm'.format(out_feat), nn.BatchNorm2d(out_feat))
-            main.add_module('pyramid-{0}-relu'.format(out_feat), nn.LeakyReLU(0.2, inplace=True))
+            main.add_module('pyramid-{0}-relu'.format(out_feat), nn.ReLU(inplace=True))
             # main.add_module('pyramid-{0}-selayer'.format(out_feat), SELayer(out_feat))
             cndf = cndf * 2
             csize = csize / 2
         main.add_module('final-{0}-{1}-conv'.format(cndf, 1), nn.Conv2d(cndf, nz, 4, 1, 0, bias=False)) # nz x 1 x 1
-        main.add_module('pyramid-{0}-selayer'.format(nz), SELayer(nz))
+        # main.add_module('pyramid-{0}-selayer'.format(nz), SELayer(nz))
         self.main = main
 
     def forward(self, input):

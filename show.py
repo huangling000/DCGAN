@@ -1,3 +1,5 @@
+import time
+
 import numpy as np
 import torchvision.utils as vutils
 import matplotlib.pyplot as plt
@@ -33,6 +35,32 @@ def _plot_real_and_fake_images(real_batch, device, img_list, save_path):
     full_path_name = "%s/%s" % (save_path, name)
     plt.savefig(full_path_name)
     #plt.show()
+
+def _save_loss(G_losses, D_losses, ticks):
+    with open("save/loss/loss_%s.txt" % int(ticks), "w") as f:
+        f.writelines(str(G_losses[0]))
+        f.writelines('\n')
+        f.writelines(str(G_losses[1]))
+        f.writelines('\n')
+        f.writelines(str(D_losses[0]))
+        f.writelines('\n')
+        f.writelines(str(D_losses[1]))
+
+def _read_loss(ticks):
+    with open("save/loss/loss_%s.txt" % int(ticks), "r") as f:
+        file = f.readlines()
+    string = file[0].rstrip('\n')
+    G_Losses0 = string[1 : len(string) - 1].split(',')
+    string = file[1].rstrip('\n')
+    G_Losses1 = string[1 : len(string) - 1].split(',')
+    string = file[2].rstrip('\n')
+    D_Losses0 = string[1 : len(string) - 1].split(',')
+    string = file[3].rstrip('\n')
+    D_Losses1 = string[1 : len(string) - 1].split(',')
+    print(list(map(float, G_Losses0))[0])
+    print(list(map(float, G_Losses1)))
+    print(list(map(float, D_Losses0)))
+    print(list(map(float, D_Losses1)))
 
 def _show_generator_images(G_losses, D_losses, save_path):
     plt.figure(figsize=(40, 20))
@@ -86,3 +114,4 @@ def show_images(train_model, config, dataloader):
     _save_img_list(img_list,save_path,config)
     real_batch = next(iter(dataloader))
     _plot_real_and_fake_images(real_batch, config["device"], img_list, save_path)
+
