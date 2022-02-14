@@ -71,8 +71,8 @@ class NNGraph(object):
 
         fake, latent_i = netG(input)
         _, latent_o= netG(fake)
-        pred_real, feat_real = netD(input)
-        pred_fake, feat_fake = netD(fake.detach())
+        pred_real, feat_real, real_last = netD(input)
+        pred_fake, feat_fake, fake_last = netD(fake.detach())
 
         errD = torch.tensor([0])
 
@@ -81,7 +81,7 @@ class NNGraph(object):
                 p.requires_grad = True # they are set to False below in netG update
             for parm in netD.parameters():
                 parm.data.clamp_(-self.config["clamp_num"], self.config["clamp_num"])
-            errD = model.get_Discriminator_loss(netD, optimizerD, pred_real, pred_fake, real_label, fake_label)
+            errD = model.get_Discriminator_loss(netD, optimizerD, pred_real, pred_fake, real_label, fake_label, real_last, fake_last)
         errG = model.get_Generator_loss(netG, netD, optimizerG, input, fake, latent_i, latent_o, self.config)
 
         #if errD.item() < 1e-5:
@@ -175,6 +175,7 @@ class NNGraph(object):
         y2 = D_losses[1]
 
         fig = plt.figure(figsize=(7, 5))  # figsize是图片的大小`
+        plt.rcParams['font.sans-serif'] = ['SimHei']
         fig.add_subplot(2, 1, 1)  # ax1是子图的名字`
         plt.plot(x1, y1, 'g-', label=u'G_loss')
         plt.legend()  # 显示图例, 图例中内容由 label 定义
@@ -191,8 +192,6 @@ class NNGraph(object):
         plt.title('Loss图-mnist-1')  # 图形的标题
 
         # 显示图形
-        show._save_loss()
-        show._read_loss(ticks)
         plt.savefig("save/loss/loss_%s.png" % int(ticks))
 
         plt.show()
@@ -335,4 +334,4 @@ def test():
     ptr = "loss_%s" % int(ticks)
     print(ptr)
 
-test()
+# test()

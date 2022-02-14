@@ -64,12 +64,12 @@ class DisEncoder(nn.Module):
             main.add_module('pyramid-{0}-{1}-conv'.format(in_feat, out_feat), nn.Conv2d(in_feat, out_feat, 4, 2, 1, bias=False))
             main.add_module('pyramid-{0}-batchnorm'.format(out_feat), nn.BatchNorm2d(out_feat))
             main.add_module('pyramid-{0}-relu'.format(out_feat), nn.LeakyReLU(0.2, inplace=True))
-            # main.add_module('pyramid-{0}-selayer'.format(out_feat), SELayer(out_feat))
+            main.add_module('pyramid-{0}-selayer'.format(out_feat), SELayer(out_feat))
             cndf = cndf * 2
 
             csize = csize / 2
         main.add_module('final-{0}-{1}-conv'.format(cndf, 1), nn.Conv2d(cndf, nz, 4, 1, 0, bias=False)) # nz x 1 x 1
-        # main.add_module('pyramid-{0}-selayer'.format(nz), SELayer(nz))
+        main.add_module('pyramid-{0}-selayer'.format(nz), SELayer(nz))
         self.main = main
 
     def forward(self, input):
@@ -166,6 +166,8 @@ class Discriminator(nn.Module):
         layers = list(model.main.children())
         # self.features的内容为除了最后一层的前8层
         self.features = nn.Sequential(*layers[:-1])
+        # wgan 最后一层
+        self.last_layer = nn.Sequential(layers[-1])
         # 分类器
         self.classifier = nn.Sequential(layers[-1])
         self.classifier.add_module('Sigmoid', nn.Sigmoid())
@@ -173,11 +175,13 @@ class Discriminator(nn.Module):
     def forward(self, x):
         features = self.features(x)
         features = features
+        last_layer = self.last_layer(features)
+        last_layer = last_layer.mean(0)
         classifier = self.classifier(features)
         classifier = classifier.view(-1, 1).squeeze(1)
         # classifier.type(torch.float32)
 
-        return classifier, features
+        return classifier, features, last_layer.view(1)
     '''
     def __init__(self, config):
         super(Discriminator, self).__init__()

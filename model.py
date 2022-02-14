@@ -122,19 +122,21 @@ def _run_Discriminator(netD, data, label, loss):
     m = output.mean().item()
     return err, m
 
-def get_Discriminator_loss(netD, optimizerD, pred_real, pred_fake, real_label, fake_label):
+def get_Discriminator_loss(netD, optimizerD, pred_real, pred_fake, real_label, fake_label, errD_real, errD_fake):
     # Real - Fake Loss
+    '''
     l_bce = nn.BCELoss()
     err_d_real = l_bce(pred_real, real_label)
     err_d_fake = l_bce(pred_fake, fake_label)
-    # err_d_real = pred_real - real_label
-    # err_d_fake = pred_fake - fake_label
-    # err_d_real.mean()
-    # err_d_fake.mean()
-    # NetD Loss & Backward-Pass
     optimizerD.zero_grad()
     err_d = (err_d_real + err_d_fake) * 0.5
-    err_d.backward()
+    '''
+    one = torch.FloatTensor([1])
+    mone = one * -1
+    one, mone = one.cuda(), mone.cuda()
+    errD_real.backward(one)
+    errD_fake.backward(mone)
+    err_d = errD_real - errD_fake
     optimizerD.step()
     return err_d
 
