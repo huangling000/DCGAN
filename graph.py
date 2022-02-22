@@ -53,6 +53,8 @@ class NNGraph(object):
         netD = self.train_model["netD"]
         optimizerD = self.train_model["optimizerD"]
         device = self.config["device"]
+        netDTeacher = self.train_model["netTeacher"]
+        optimizerDTeacher = self.train_model["optimizerTeacher"]
 
         # real_data = data[0].to(device)
         input = torch.empty(size=(self.config["batch_size"], 3, self.isize, self.isize), dtype=torch.float32,
@@ -69,20 +71,31 @@ class NNGraph(object):
             label.resize_(data[1].size())
 
 
-        fake, latent_i = netG(input)
-        _, latent_o= netG(fake)
-        pred_real, feat_real, real_last = netD(input)
-        pred_fake, feat_fake, fake_last = netD(fake.detach())
+        fake, latent_i, latent_o = netG(input)
+        # _, latent_o = netG(fake)
+        pred_real, feat_real, real_last, _ = netD(input)
+        pred_fake, feat_fake, fake_last, _ = netD(fake.detach())
+        # pred_real, feat_real = netD(input)
+        # pred_fake, feat_fake = netD(fake.detach())
+
+        pred_real_teacher, real_last_teacher = netDTeacher(input)
+        pred_fake_teacher, fake_last_teacher = netDTeacher(fake.detach())
 
         errD = torch.tensor([0])
 
+        errG = model.get_Generator_loss(netG, netD, optimizerG, input, fake, latent_i, latent_o, self.config)
         if i % self.config["generator_learntimes"] == 0:
             for p in netD.parameters(): # reset requires_grad
                 p.requires_grad = True # they are set to False below in netG update
             for parm in netD.parameters():
                 parm.data.clamp_(-self.config["clamp_num"], self.config["clamp_num"])
-            errD = model.get_Discriminator_loss(netD, optimizerD, pred_real, pred_fake, real_label, fake_label, real_last, fake_last)
-        errG = model.get_Generator_loss(netG, netD, optimizerG, input, fake, latent_i, latent_o, self.config)
+            errD = model.get_Discriminator_loss(netD, optimizerD, pred_real, pred_fake, real_label, fake_label,
+                                                real_last, fake_last, real_last_teacher, fake_last_teacher, optimizerDTeacher)
+
+        #errD = model.get_Discriminator_loss(netD, optimizerD, pred_real, pred_fake, real_label, fake_label)
+        # for p in netD.parameters():
+            # p.requires_grad = False
+
 
         #if errD.item() < 1e-5:
             #self.train_model["netG"].apply(model._weights_init)
@@ -242,8 +255,8 @@ class NNGraph(object):
                                 device=device)
             label = torch.empty(size=(self.config["batch_size"],), dtype=torch.float32, device=device)
             gt = torch.empty(size=(self.config["batch_size"],), dtype=torch.long, device=device)
-            for _, data in enumerate(self.dataloader['test'], 0):
-                data[0] = self.gasuss_noise(data[0])
+            # for _, data in enumerate(self.dataloader['test'], 0):
+                # data[0] = self.gasuss_noise(data[0])
             time_i = time.time()
             for i, data in enumerate(self.dataloader['test'], 0):
                 with torch.no_grad():
@@ -251,11 +264,11 @@ class NNGraph(object):
                     gt.resize_(data[1].size()).copy_(data[1])
                     label.resize_(data[1].size())
 
-                fake, latent_input = netG(input)
-                _, latent_fake = netG(fake)
+                fake, latent_input, latent_fake = netG(input)
+                #_, latent_fake = netG(fake)
 
                 # error = torch.zeros_like(fake)
-                if self.config["score_method"] == "ganomaly":
+                if self.config["score_method"] == "normal":
                     error = torch.mean(torch.pow((latent_input - latent_fake), 2), dim=1)
                 else:
                     err_d_con = torch.mean((fake - input), dim=1)
@@ -263,7 +276,12 @@ class NNGraph(object):
                     err_d_enc = torch.mean(torch.pow((latent_input - latent_fake), 2), dim=1)
                     error = err_d_con * (1 - self.config["error_lamda"]) + \
                             err_d_enc * self.config["error_lamda"]
-
+                    '''
+                    netD = self.train_model["netD"]
+                    _, _, _, dis_input = netD(input)
+                    _, _, _, dis_fake = netD(fake)
+                    error = torch.mean(torch.pow((dis_input - dis_fake), 2), dim=1)
+                    '''
                 an_scores[i * self.config["batch_size"]: i * self.config["batch_size"] + error.size(0)] = error.reshape(
                     error.size(0))
                 gt_labels[i * self.config["batch_size"]: i * self.config["batch_size"] + error.size(0)] = gt.reshape(
@@ -291,7 +309,7 @@ class NNGraph(object):
             # print(print_str)
 
 
-    def roc(self, labels, scores, config, saveto = None):
+    def roc(self, labels, scores, config, saveto = True):
         fpr = dict()
         tpr = dict()
         roc_auc = dict()
@@ -323,7 +341,7 @@ class NNGraph(object):
             plt.legend(loc="lower right")
             # saveto = saveto + "_%s_%s_" % (config["mnist_abnormal_class"], time.strftime("%Y_%m_%d_%Hh_%Mm_%Ss", time.localtime()))
             # plt.savefig(os.path.join(saveto, 'ROC.pdf'))
-            # plt.show()
+            plt.show()
             plt.close()
 
 

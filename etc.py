@@ -3,14 +3,14 @@ import torch
 config = {}
 
 config["dataset"] = "celebA"
-config["mnist_abnormal_class"] = 1
+config["mnist_abnormal_class"] = 0
 config["cifar10_abnormal_class"] = 'car'
 config["batch_size"] = 64
 config["image_size"] = 64
 config["mnist_image_size"] = 32
 config["cifar10_image_size"] = 64
-config["num_epochs"] = 5
-config["generator_learntimes"] = 4
+config["num_epochs"] = 10
+config["generator_learntimes"] = 1
 config["data_path"] = "data/%s" % config["dataset"]
 config["workers"] = 0
 config["print_every"] = 200
@@ -21,7 +21,7 @@ config["add_noise"] = True
 config["clamp_num"] = 0.01
 config["score_method"] = 'ganomaly' # 'ganomaly' or 'normal'
 config["optimAdam"] = True
-config["add_gasuss"] = True
+config["add_gasuss"] = False
 config["Diters"] = 100
 #config["manual_seed"] = random.randint(1, 10000) # use if you want new results
 

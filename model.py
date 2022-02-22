@@ -3,9 +3,11 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from DCGAN_architecture import Generator, Discriminator, AAEGenerator, AAEGenerator2
+from DCGAN_architecture import Generator, Discriminator, AAEGenerator, AAEGenerator2, Resnet_18
 
 import record
+from torchvision import models
+
 
 def _weights_init(m):
     classname = m.__class__.__name__
@@ -24,6 +26,19 @@ def _get_a_net(Net, config, isize):
     ngpu = config["number_gpus"]
     device = config["device"]
     net = Net(config, isize).to(device)
+    if (device.type == 'cuda') and (ngpu > 1):
+        net = nn.DataParallel(net, list(range(ngpu)))
+    net.apply(_weights_init)
+
+    record.save_status(config, net)
+    return net
+
+def _get_teacherd_net(Net, config):
+    nc = config["number_channels"]
+    nz = config["size_of_z_latent"]
+    ngpu = config["number_gpus"]
+    device = config["device"]
+    net = Net(config, nc, nz).to(device)
     if (device.type == 'cuda') and (ngpu > 1):
         net = nn.DataParallel(net, list(range(ngpu)))
     net.apply(_weights_init)
@@ -85,11 +100,13 @@ def get_model_dict(train_model):
 
 def init_train_model(config, isize):
     _random_init(config)
-    netG = _get_a_net(AAEGenerator, config, isize)
+    netG = _get_a_net(AAEGenerator2, config, isize)
     netD = _get_a_net(Discriminator, config, isize)
+    netTeacher = _get_teacherd_net(Resnet_18, config)
     criterion = nn.BCELoss()
     optimizerD = _get_optimizer(netD, config, config["discriminator_learn_rate"], config["optimAdam"])
     optimizerG = _get_optimizer(netG, config, config["generator_learn_rate"], config["optimAdam"])
+    optimizerDTeacher = _get_optimizer(netTeacher, config, config["discriminator_learn_rate"], config["optimAdam"])
 
     fixed_noise = _get_fixed_noise(config)
 
@@ -99,6 +116,8 @@ def init_train_model(config, isize):
     train_model["criterion"] = criterion
     train_model["optimizerD"] = optimizerD
     train_model["optimizerG"] = optimizerG
+    train_model["netTeacher"] = netTeacher
+    train_model["optimizerTeacher"] = optimizerDTeacher
     train_model["fixed_noise"] = fixed_noise
 
     train_model["G_losses"] = []
@@ -122,26 +141,41 @@ def _run_Discriminator(netD, data, label, loss):
     m = output.mean().item()
     return err, m
 
-def get_Discriminator_loss(netD, optimizerD, pred_real, pred_fake, real_label, fake_label, errD_real, errD_fake):
+def get_Discriminator_loss(netD, optimizerD, pred_real, pred_fake, real_label, fake_label, errD_real, errD_fake, real_last_teacher, fake_last_teacher, optimizerDTeacher):
+#def get_Discriminator_loss(netD, optimizerD, pred_real, pred_fake, real_label, fake_label):
     # Real - Fake Loss
     '''
+    optimizerD.zero_grad()
     l_bce = nn.BCELoss()
     err_d_real = l_bce(pred_real, real_label)
     err_d_fake = l_bce(pred_fake, fake_label)
-    optimizerD.zero_grad()
     err_d = (err_d_real + err_d_fake) * 0.5
+    err_d.backward()
     '''
+    optimizerDTeacher.zero_grad()
+    one_t = torch.FloatTensor([1])
+    mone_t = one_t * 0
+    one_t, mone_t = one_t.cuda(), mone_t.cuda()
+
+    real_last_teacher.backward(one_t)
+    fake_last_teacher.backward(mone_t)
+    err_d_teacher = real_last_teacher - fake_last_teacher
+    optimizerDTeacher.step()
+
+    optimizerD.zero_grad()
     one = torch.FloatTensor([1])
-    mone = one * -1
+    mone = one * 0
     one, mone = one.cuda(), mone.cuda()
     errD_real.backward(one)
     errD_fake.backward(mone)
     err_d = errD_real - errD_fake
+    err_d = err_d * 0.5 + err_d_teacher * 0.5
     optimizerD.step()
     return err_d
 
 def get_Generator_loss(netG, netD, optimizerG, input, fake, latent_i, latent_o, config):
-    netG.zero_grad()
+
+    optimizerG.zero_grad()
     l_adv = l2_loss
     l_con = nn.L1Loss()
     l_enc = l2_loss
