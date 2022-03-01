@@ -149,9 +149,9 @@ class NNGraph(object):
         iters = self.train_model["current_iters"]
         start_epoch = self.train_model["current_epoch"]
 
-        if self.config["add_gasuss"]:
-            for _, data in enumerate(self.dataloader['train'], 0):
-                data[0] = self.gasuss_noise(data[0])
+        # if self.config["add_gasuss"]:
+            # for _, data in enumerate(self.dataloader['train'], 0):
+                # data[0] = self.gasuss_noise(data[0], var=0.001)
         for epoch in range(start_epoch, num_epochs):
             self.train_model["current_epoch"] = epoch
             for i, data in enumerate(self.dataloader['train'], 0):
@@ -245,6 +245,9 @@ class NNGraph(object):
             for _, data in enumerate(self.dataloader['test'], 0):
                 data[0] = self.gasuss_noise(data[0])
             time_i = time.time()
+            if self.config["add_gasuss"]:
+                for _, data in enumerate(self.dataloader['test'], 0):
+                    data[0] = self.gasuss_noise(data[0], var=0.01)
             for i, data in enumerate(self.dataloader['test'], 0):
                 with torch.no_grad():
                     input.resize_(data[0].size()).copy_(data[0])

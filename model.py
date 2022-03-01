@@ -131,8 +131,9 @@ def get_Discriminator_loss(netD, optimizerD, pred_real, pred_fake, real_label, f
     optimizerD.zero_grad()
     err_d = (err_d_real + err_d_fake) * 0.5
     '''
+    optimizerD.zero_grad()
     one = torch.FloatTensor([1])
-    mone = one * -1
+    mone = one * 0
     one, mone = one.cuda(), mone.cuda()
     errD_real.backward(one)
     errD_fake.backward(mone)
@@ -141,7 +142,7 @@ def get_Discriminator_loss(netD, optimizerD, pred_real, pred_fake, real_label, f
     return err_d
 
 def get_Generator_loss(netG, netD, optimizerG, input, fake, latent_i, latent_o, config):
-    netG.zero_grad()
+    optimizerG.zero_grad()
     l_adv = l2_loss
     l_con = nn.L1Loss()
     l_enc = l2_loss
