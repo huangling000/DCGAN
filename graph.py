@@ -4,6 +4,7 @@ import time
 import numpy as np
 import torch
 import torchvision.utils as vutils
+import cv2
 from matplotlib import pyplot as plt
 from sklearn.metrics import roc_curve, auc
 from scipy.optimize import brentq
@@ -216,6 +217,19 @@ class NNGraph(object):
         # noise = noise*255
         return out
 
+    def img_rotation(self, image):
+        # 原图的高、宽 以及通道数
+        rows, cols, channel = image.shape
+
+        # 绕图像的中心旋转
+        # 参数：旋转中心 旋转度数 scale
+        M = cv2.getRotationMatrix2D((cols / 2, rows / 2), 30, 1)
+        # 参数：原始图像 旋转参数 元素图像宽高
+        rotated = cv2.warpAffine(image, M, (cols, rows))
+
+        # 显示图像
+        cv2.imshow("rotated", rotated)
+
     def train(self):
         self._train_iters()
 
@@ -242,12 +256,11 @@ class NNGraph(object):
                                 device=device)
             label = torch.empty(size=(self.config["batch_size"],), dtype=torch.float32, device=device)
             gt = torch.empty(size=(self.config["batch_size"],), dtype=torch.long, device=device)
-            for _, data in enumerate(self.dataloader['test'], 0):
-                data[0] = self.gasuss_noise(data[0])
             time_i = time.time()
             if self.config["add_gasuss"]:
                 for _, data in enumerate(self.dataloader['test'], 0):
                     data[0] = self.gasuss_noise(data[0], var=0.01)
+
             for i, data in enumerate(self.dataloader['test'], 0):
                 with torch.no_grad():
                     input.resize_(data[0].size()).copy_(data[0])

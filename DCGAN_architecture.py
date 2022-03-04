@@ -211,6 +211,7 @@ class Encoder(nn.Module):
             main.add_module('pyramid-{0}-batchnorm'.format(out_feat), nn.BatchNorm2d(out_feat))
             main.add_module('pyramid-{0}-relu'.format(out_feat), nn.ReLU(inplace=True))
             # main.add_module('pyramid-{0}-selayer'.format(out_feat), SELayer(out_feat))
+            # main.add_module('pyramid-{0}-SAN'.format(out_feat), Bottleneck(1, out_feat, out_feat // 16, out_feat // 4, out_feat, 8, 3))
             cndf = cndf * 2
             csize = csize / 2
         main.add_module('final-{0}-{1}-conv'.format(cndf, 1), nn.Conv2d(cndf, nz, 4, 1, 0, bias=False)) # nz x 1 x 1

@@ -11,16 +11,25 @@ def get_dataloader(config, dataset):
         drop_last_batch = {'train': True, 'test': False}
         shuffle = {'train': True, 'test': True}
 
-        transform = transforms.Compose(
+        transform_train = transforms.Compose(
             [
                 transforms.Resize(config["mnist_image_size"]),
                 transforms.ToTensor(),
-                transforms.Normalize((0.1307,), (0.3081,))
+                transforms.Normalize((0.1307,), (0.3081,)),
+                transforms.RandomRotation((30, 100))
+            ]
+        )
+        transform_test = transforms.Compose(
+            [
+                transforms.Resize(config["mnist_image_size"]),
+                transforms.ToTensor(),
+                transforms.Normalize((0.1307,), (0.3081,)),
+                transforms.RandomRotation((30, 100))
             ]
         )
         dataset = {}
-        dataset['train'] = MNIST(root='./data', train=True, download=True, transform=transform)
-        dataset['test'] = MNIST(root='./data', train=False, download=True, transform=transform)
+        dataset['train'] = MNIST(root='./data', train=True, download=True, transform=transform_train)
+        dataset['test'] = MNIST(root='./data', train=False, download=True, transform=transform_test)
 
         dataset['train'].data, dataset['train'].targets, \
         dataset['test'].data, dataset['test'].targets = get_mnist_anomaly_dataset(
