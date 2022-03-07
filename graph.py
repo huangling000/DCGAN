@@ -10,10 +10,13 @@ from sklearn.metrics import roc_curve, auc
 from scipy.optimize import brentq
 from scipy.interpolate import interp1d
 import torch.nn as nn
+from torch.nn.functional import cross_entropy
 
 import model
 import show
 import record
+from etc import config
+
 
 class NNGraph(object):
     def __init__(self, dataloader, config, isize):
@@ -156,6 +159,7 @@ class NNGraph(object):
         for epoch in range(start_epoch, num_epochs):
             self.train_model["current_epoch"] = epoch
             for i, data in enumerate(self.dataloader['train'], 0):
+                # data[0] = self.test_adv(data[0], data[1])
                 errD, errG = self._train_a_step(data, i, epoch)
                 G_losses[0].append(i + epoch * len(self.dataloader['train']))
                 G_losses[1].append(errG.item())
@@ -235,10 +239,18 @@ class NNGraph(object):
 
         # show.show_images(self.train_model, self.config, self.dataloader)
 
+    def test_adv(self, x, y, model):
+        net = model
+        # attack = LinfPGDAttack(net)
+        attack = MIFGSM(net)
+        x_adv = attack(x, y)
+        return x_adv
 
     def test(self):
         device = self.config["device"]
-
+        netD = self.train_model["netD"]
+        for i, data in enumerate(self.dataloader['test'], 0):
+            data[0] = self.test_adv(data[0], data[1], netD)
         with torch.no_grad():
             netG = self.train_model["netG"]
 
@@ -344,6 +356,54 @@ class NNGraph(object):
 
 
         return roc_auc
+
+
+class MIFGSM(object):
+    """
+        Momentum Iterative Fast Gradient Sign Method(https://arxiv.org/pdf/1710.06081.pdf)
+    """
+
+    def __init__(self, model, epsilon=0.02, k=10, mu=1.0, eps=1e-12):
+        self.model = model
+        self.epsilon = epsilon
+        self.k = k
+        self.mu = mu
+        self.alpha = self.epsilon / self.k
+        self.eps = eps
+
+    def __call__(self, x, y):
+        x_adv = torch.empty(size=(config["batch_size"],), dtype=torch.float32, device=config["device"])
+        label = torch.empty(size=(config["batch_size"],), dtype=torch.float32, device=config["device"])
+        x_adv.resize_(x.size()).copy_(x)
+        with torch.no_grad():
+            label.resize_((y.size())).copy_(y)
+        training = self.model.training
+        if training:
+            self.model.eval()
+        grad = None
+        for i in range(self.k):
+            x_adv.requires_grad_(requires_grad=True)
+            y_, _, _ = self.model(x_adv)
+            l_bce = nn.BCELoss()
+            pred = l_bce(y_, label)
+            pred.backward()
+            x_grad = x_adv.grad.data
+            # norm = torch.mean(torch.abs(x_grad).view((x_grad.shape[0], -1)), dim=1).view((-1, 1, 1, 1))
+            norm = x_grad.abs().mean(dim=(1, 2, 3), keepdim=True)
+            norm.clamp_(min=self.eps)
+            x_grad /= norm
+            grad = x_grad if grad is None else self.mu * grad + x_grad
+            # update x_adv
+            x_adv = x_adv.detach() + self.alpha * grad.sign()
+
+            # x_adv = np.clip(x_adv, x_adv-self.epsilon, x_adv+self.epsilon)
+            x_adv = torch.min(torch.max(x_adv, x.cuda() - self.epsilon), x.cuda() + self.epsilon)
+
+            x_adv.clamp_(0, 1)
+        if training:
+            self.model.train()
+        return x_adv
+
 
 def test():
     ticks = time.time()

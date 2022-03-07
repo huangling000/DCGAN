@@ -15,8 +15,7 @@ def get_dataloader(config, dataset):
             [
                 transforms.Resize(config["mnist_image_size"]),
                 transforms.ToTensor(),
-                transforms.Normalize((0.1307,), (0.3081,)),
-                transforms.RandomRotation((30, 100))
+                transforms.Normalize((0.1307,), (0.3081,))
             ]
         )
         transform_test = transforms.Compose(
@@ -29,7 +28,7 @@ def get_dataloader(config, dataset):
         )
         dataset = {}
         dataset['train'] = MNIST(root='./data', train=True, download=True, transform=transform_train)
-        dataset['test'] = MNIST(root='./data', train=False, download=True, transform=transform_test)
+        dataset['test'] = MNIST(root='./data', train=False, download=True, transform=transform_train)
 
         dataset['train'].data, dataset['train'].targets, \
         dataset['test'].data, dataset['test'].targets = get_mnist_anomaly_dataset(
